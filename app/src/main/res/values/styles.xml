@@ -21,4 +21,15 @@
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
+    <!-- Custom button style -->
+    <style name="CustomTextFieldStyle">
+        <item name="android:background">@drawable/textview_background</item>
+        <item name="android:textColor">@drawable/text_state_selector</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:layout_marginRight">15dp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
 </resources>

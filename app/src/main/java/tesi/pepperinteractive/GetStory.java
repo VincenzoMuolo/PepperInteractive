@@ -19,6 +19,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.aldebaran.qi.Future;
 import com.aldebaran.qi.QiException;
@@ -104,7 +105,9 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
     //Costanti per la nuova loading bar
     private RelativeLayout loadingLayout;
     private TextView loadedResource;
+    private TextView correctAnswersCount;
     private int countResources = 0;
+    private int corrAnswers = 0, totAnswers = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,6 +125,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         answerButton2 = findViewById(R.id.answerButton2);
         answerButton3 = findViewById(R.id.answerButton3);
         answerButton4 = findViewById(R.id.answerButton4);
+        correctAnswersCount = findViewById(R.id.corrAnswerCount);
 
         //Link al layout della loading bar
         loadingLayout = findViewById(R.id.loadingLayout);
@@ -547,6 +551,8 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                                 return null;
                             }
                             else {
+                                totAnswers += 1;
+                                Log.d("count-answer","Tot Answer : "+totAnswers);
                                 paragraphID = Integer.parseInt(jsonObject.getString("IdParagrafo"));
                                 domanda = jsonObject.getString("Domanda");
                                 risposta1 = jsonObject.getString("Risposta1");
@@ -588,9 +594,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             }
 
             @Override
-            protected void onPostExecute(String b) {
-                super.onPostExecute(b);
-            }
+            protected void onPostExecute(String b) { super.onPostExecute(b); }
         }
         GetQuestion getQuestion = new GetQuestion();
         Log.d("question-logic","Nome storia : "+PepperStory.storyTitle+ "   ID paragrafo : "+(id+1));
@@ -692,6 +696,8 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         }
         Log.d("CARICAMENTO", "\n\nFine caricamento");
         loadingLayout.setVisibility(View.GONE);
+        correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers);
+        correctAnswersCount.setVisibility(View.VISIBLE);
         startTalk();
     }
 
@@ -806,7 +812,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             Future<Void> animateFuture = animate.async().run();
             String endStoryPhrase="La storia è terminata. Grazie a tutti per l'attenzione.";
             if (!questionDataMap.isEmpty())
-                endStoryPhrase="Grazie per la partecipazione";
+                endStoryPhrase="Grazie per la partecipazione, le risposte corrette sono "+corrAnswers+" su un totale di "+totAnswers;
             Phrase endStory = new Phrase(endStoryPhrase);
             Say say2 = SayBuilder.with(qiContext).withPhrase(endStory).build();
             say2.run();
@@ -827,7 +833,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
 
 
     private Future<ListenResult> listenFuture; // Variabile per tracciare il Future del processo di ascolto
-
+    private boolean preventSpam = false;
     private void handleAnswerFromButton(int idParagraphDestination, int answerType, QiContext qiContext) {
         int newIndex;
         String responseText = "";
@@ -839,6 +845,13 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             if (answerType == 1) {
                 Log.d("question-logic-focus", RISPOSTA_CORRETTA);
                 responseText = RISPOSTA_CORRETTA;
+
+                if(!preventSpam){
+                    corrAnswers+=1;
+                    correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers);
+                    preventSpam = true;
+                }
+
             } else if (answerType == 2) {
                 Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
                 responseText = RISPOSTA_SBAGLIATA;
@@ -856,6 +869,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         runOnUiThread(() -> buttonContainer.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton3.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton4.setVisibility(View.GONE));
+                        preventSpam = false;
                         runOnUiThread(this::getParagraph);
                     });
                 } else {
@@ -867,7 +881,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
 
     private void askQuestionAndListen(QiContext qiContext, QuestionData questionData) {
         Log.d("question-logic-focus", "Sto per farti una domanda: " + questionData.getDomanda());
-        String build_phrase_with_answers = questionData.getDomanda() + "\\wait=7\\" + questionData.getRisposta1() + "\\wait=7\\" + questionData.getRisposta2();
+        String build_phrase_with_answers = questionData.getDomanda() + "\\wait=9\\" + questionData.getRisposta1() + "\\wait=9\\" + questionData.getRisposta2();
         if (!questionData.getRisposta3().equals("null")) {
             Log.d("question-logic-focus", "QUANTO VALE: "+questionData.getRisposta3());
             build_phrase_with_answers += "\\wait=7\\" + questionData.getRisposta3();
@@ -878,6 +892,23 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         }
         Phrase questionPhrase = new Phrase("\\rspd=85\\\\wait=9\\"+build_phrase_with_answers);
         Say sayQuestion = SayBuilder.with(qiContext).withPhrase(questionPhrase).build();
+        runOnUiThread(() -> {
+            buttonContainer.setVisibility(View.VISIBLE);
+            answerButton1.setText(questionData.getRisposta1());
+            answerButton2.setText(questionData.getRisposta2());
+            answerButton3.setText(questionData.getRisposta3());
+            answerButton4.setText(questionData.getRisposta4());
+            answerButton1.setEnabled(false);
+            answerButton2.setEnabled(false);
+            answerButton3.setEnabled(false);
+            answerButton4.setEnabled(false);
+            if (!questionData.getRisposta3().equals("null")) {
+                answerButton3.setVisibility(View.VISIBLE);
+            }
+            if (!questionData.getRisposta4().equals("null")) {
+                answerButton4.setVisibility(View.VISIBLE);
+            }
+        });
 
         // Metodo di interazione 1: pressione sul bottone
         answerButton1.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione1(), questionData.getEsitoRisp1(), qiContext));
@@ -893,19 +924,12 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         "\nB : " + questionData.getRisposta2() +" La risposta è : "+questionData.getEsitoRisp2()+
                         "\nC : " + questionData.getRisposta3() +" La risposta è : "+questionData.getEsitoRisp3()+
                         "\nD : " + questionData.getRisposta4() +" La risposta è : "+questionData.getEsitoRisp4());
-                runOnUiThread(() -> buttonContainer.setVisibility(View.VISIBLE));
                 runOnUiThread(() -> {
-                    answerButton1.setText(questionData.getRisposta1());
-                    answerButton2.setText(questionData.getRisposta2());
-                    answerButton3.setText(questionData.getRisposta3());
-                    answerButton4.setText(questionData.getRisposta4());
+                        answerButton1.setEnabled(true);
+                        answerButton2.setEnabled(true);
+                        answerButton3.setEnabled(true);
+                        answerButton4.setEnabled(true);
                 });
-                if (!questionData.getRisposta3().equals("null")) {
-                    runOnUiThread(() -> answerButton3.setVisibility(View.VISIBLE));
-                }
-                if (!questionData.getRisposta4().equals("null")) {
-                    runOnUiThread(() -> answerButton4.setVisibility(View.VISIBLE));
-                }
                 PhraseSet phraseSet1 = PhraseSetBuilder.with(qiContext)
                         .withTexts(questionData.getRisposta1()).build();
                 PhraseSet phraseSet2 = PhraseSetBuilder.with(qiContext)
@@ -931,6 +955,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         if (questionData.getEsitoRisp1() == 1) {
                             Log.d("question-logic-focus", RISPOSTA_CORRETTA);
                             responseText = RISPOSTA_CORRETTA;
+                            corrAnswers+=1;
                         } else if (questionData.getEsitoRisp1() == 2) {
                             Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
                             responseText = RISPOSTA_SBAGLIATA;
@@ -940,6 +965,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         if (questionData.getEsitoRisp2() == 1) {
                             Log.d("question-logic-focus", RISPOSTA_CORRETTA);
                             responseText = RISPOSTA_CORRETTA;
+                            corrAnswers+=1;
                         } else if (questionData.getEsitoRisp2() == 2) {
                             Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
                             responseText = RISPOSTA_SBAGLIATA;
@@ -949,6 +975,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         if (questionData.getEsitoRisp3() == 1) {
                             Log.d("question-logic-focus", RISPOSTA_CORRETTA);
                             responseText = RISPOSTA_CORRETTA;
+                            corrAnswers+=1;
                         } else if (questionData.getEsitoRisp3() == 2) {
                             Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
                             responseText = RISPOSTA_SBAGLIATA;
@@ -958,6 +985,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         if (questionData.getEsitoRisp4() == 1) {
                             Log.d("question-logic-focus", RISPOSTA_CORRETTA);
                             responseText = RISPOSTA_CORRETTA;
+                            corrAnswers+=1;
                         } else if (questionData.getEsitoRisp4() == 2) {
                             Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
                             responseText = RISPOSTA_SBAGLIATA;
@@ -973,13 +1001,14 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         runOnUiThread(() -> buttonContainer.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton3.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton4.setVisibility(View.GONE));
+                        runOnUiThread(() -> correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers));
                         runOnUiThread(this::getParagraph);
                     });
                 });
             });
         }
     }
-// TODO: 20/05/2024 includere semplice animazione di fade-in e fade-out ai bottoni, sistemare i tag
+// TODO : 17/06/2024 Aggiungere una considerazione finale in base al numero di risposte corrette? - far ripartire subito la storia?
 
     @Override
     public void onRobotFocusLost() {
