@@ -20,7 +20,6 @@ import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import com.aldebaran.qi.Future;
 import com.aldebaran.qi.QiException;
 import com.aldebaran.qi.sdk.QiContext;
@@ -64,8 +63,10 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
@@ -106,8 +107,14 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
     private RelativeLayout loadingLayout;
     private TextView loadedResource;
     private TextView correctAnswersCount;
-    private int countResources = 0;
-    private int corrAnswers = 0, totAnswers = 0;
+    private int countResources = 0, n_question = 1;
+    private int corrAnswers = 0, totAnswers = 0, countAnswers = 0;
+    String[] positiveFeedback = {
+            "Bene",
+            "Continuamo",
+            "Bravo",
+            "Vediamone un'altra"
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -601,12 +608,8 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         getQuestion.execute(""+PepperStory.storyTitle, ""+id);
     }
     //FINE CARICA DATI DOMANDA
-
+    protected List<Esito> esito = new ArrayList<>();
     private void getParagraph() {
-
-        Log.d("prova", "valore array paragrafi: " +story.size());
-        Log.d("prova", "valore array immagini: " +imageList.size());
-        Log.d("prova", "prova bitmap: " + imageList.get(index));
         if (imageList.get(index) != null) {
             imageView.setBackgroundColor(255);
             imageView.setImageBitmap(imageList.get(index));
@@ -696,8 +699,8 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         }
         Log.d("CARICAMENTO", "\n\nFine caricamento");
         loadingLayout.setVisibility(View.GONE);
-        correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers);
-        correctAnswersCount.setVisibility(View.VISIBLE);
+        /*correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers);
+        correctAnswersCount.setVisibility(View.VISIBLE);*/
         startTalk();
     }
 
@@ -812,11 +815,12 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             Future<Void> animateFuture = animate.async().run();
             String endStoryPhrase="La storia è terminata. Grazie a tutti per l'attenzione.";
             if (!questionDataMap.isEmpty())
-                endStoryPhrase="Grazie per la partecipazione, le risposte corrette sono "+corrAnswers+" su un totale di "+totAnswers;
+                endStoryPhrase="Grazie per la partecipazione";
             Phrase endStory = new Phrase(endStoryPhrase);
             Say say2 = SayBuilder.with(qiContext).withPhrase(endStory).build();
             say2.run();
-
+            DataUploader uploader = new DataUploader();
+            uploader.saveDataToServer(esito);
             startActivity(new Intent(GetStory.this, PepperStory.class));
             finish();
         }
@@ -831,9 +835,17 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         });
     }
 
+    private String getRandomFeedback() {
+        Random random = new Random();
+        int index = random.nextInt(positiveFeedback.length);
+        return positiveFeedback[index];
+    }
 
     private Future<ListenResult> listenFuture; // Variabile per tracciare il Future del processo di ascolto
     private boolean preventSpam = false;
+    private String response;
+    private boolean isTest = false;
+
     private void handleAnswerFromButton(int idParagraphDestination, int answerType, QiContext qiContext) {
         int newIndex;
         String responseText = "";
@@ -843,24 +855,26 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             isButtonPressed = true;
             index = newIndex - 1;
             if (answerType == 1) {
-                Log.d("question-logic-focus", RISPOSTA_CORRETTA);
-                responseText = RISPOSTA_CORRETTA;
+                //responseText = RISPOSTA_CORRETTA;
+                responseText = getRandomFeedback();
 
                 if(!preventSpam){
-                    corrAnswers+=1;
-                    correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers);
+                    corrAnswers += 1;
+                    response = "corretto";
+
+                    //correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers);
                     preventSpam = true;
                 }
 
             } else if (answerType == 2) {
-                Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
-                responseText = RISPOSTA_SBAGLIATA;
+                //responseText = RISPOSTA_SBAGLIATA;
+                responseText = getRandomFeedback();
+                response = "sbagliato";
             }
             // Cancella il processo di ascolto corrente, se presente
             if (listenFuture != null && !listenFuture.isDone()) {
                 listenFuture.requestCancellation();
             }
-            Log.d("question-logic-focus", "Sono dopo il metodo vocale");
             String finalResponseText = responseText;
             SayBuilder.with(qiContext).withPhrase(new Phrase("\\rspd=85\\\\wait=9\\" + finalResponseText)).buildAsync().thenConsume(sayAnswerFuture -> {
                 if (sayAnswerFuture.isSuccess()) {
@@ -869,6 +883,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         runOnUiThread(() -> buttonContainer.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton3.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton4.setVisibility(View.GONE));
+                        esito.add(new Esito(PepperStory.storyTitle, index, response));
                         preventSpam = false;
                         runOnUiThread(this::getParagraph);
                     });
@@ -879,15 +894,91 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         }
     }
 
+    public class DataUploader {
+        private void saveDataToServer(List<Esito> esiti) {
+            class SaveDataTask extends AsyncTask<Void, Void, String> {
+
+                @Override
+                protected String doInBackground(Void... params) {
+
+                    OkHttpClient client = RequestOkHttpClient.getOkHttpClient();
+
+                    try {
+                        URL url = new URL("https://pepper4storytelling.altervista.org/Cartella%20temporanea%20GETTERS/retrieve_results.php");
+
+                        // Converti la lista in JSON
+                        JSONArray jsonArray = new JSONArray();
+                        for (Esito esito : esiti) {
+                            jsonArray.put(esito.toJson());
+                        }
+                        String json = jsonArray.toString();
+
+                        // Costruisci il corpo della richiesta POST
+                        MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
+                        RequestBody body = RequestBody.create(mediaType, json);
+
+                        // Costruisci la richiesta POST con OkHttp
+                        Request request = new Request.Builder()
+                                .url(url)
+                                .post(body)
+                                .build();
+
+                        // Esegui la richiesta e gestisci la risposta
+                        Response response = client.newCall(request).execute();
+                        if (response.isSuccessful()) {
+                            String responseBody = response.body().string();
+                            Log.d("save-data", "Response: " + responseBody);
+                            return responseBody;
+                        } else {
+                            Log.e("save-data", "Errore nella risposta: " + response.code() + " " + response.message());
+                        }
+                    } catch (IOException e) {
+                        Log.e("save-data", "Errore durante la richiesta HTTP: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+
+                    return null;
+                }
+
+                @Override
+                protected void onPreExecute() {
+                    super.onPreExecute();
+                }
+
+                @Override
+                protected void onPostExecute(String result) {
+                    super.onPostExecute(result);
+                    // Mostra un toast qui
+                    if(isTest){
+                        if (result != null) {
+                            Toast.makeText(getApplicationContext(), "Test completato, i dati verranno caricati sul sito web", Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(getApplicationContext(), "Errore nel caricamento dei dati.", Toast.LENGTH_LONG).show();
+                        }
+                    }
+
+                }
+
+            }
+
+            SaveDataTask saveDataTask = new SaveDataTask();
+            saveDataTask.execute();
+        }
+    }
+
     private void askQuestionAndListen(QiContext qiContext, QuestionData questionData) {
+        runOnUiThread(() -> {
+            correctAnswersCount.setVisibility(View.VISIBLE);
+            correctAnswersCount.setText("Domanda " + (n_question));
+        });
         Log.d("question-logic-focus", "Sto per farti una domanda: " + questionData.getDomanda());
-        String build_phrase_with_answers = questionData.getDomanda() + "\\wait=9\\" + questionData.getRisposta1() + "\\wait=9\\" + questionData.getRisposta2();
+        String build_phrase_with_answers = questionData.getDomanda() + "\\wait=9\\" + questionData.getRisposta1() + "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta2();
         if (!questionData.getRisposta3().equals("null")) {
             Log.d("question-logic-focus", "QUANTO VALE: "+questionData.getRisposta3());
-            build_phrase_with_answers += "\\wait=7\\" + questionData.getRisposta3();
+            build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta3();
             if (!questionData.getRisposta4().equals("null")) {
                 Log.d("question-logic-focus", "QUANTO VALE: "+questionData.getRisposta4());
-                build_phrase_with_answers += "\\wait=7\\" + questionData.getRisposta4();
+                build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta4();
             }
         }
         Phrase questionPhrase = new Phrase("\\rspd=85\\\\wait=9\\"+build_phrase_with_answers);
@@ -909,7 +1000,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                 answerButton4.setVisibility(View.VISIBLE);
             }
         });
-
+        n_question +=1;
         // Metodo di interazione 1: pressione sul bottone
         answerButton1.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione1(), questionData.getEsitoRisp1(), qiContext));
         answerButton2.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione2(), questionData.getEsitoRisp2(), qiContext));
@@ -953,42 +1044,51 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
 
                     if (heardPhrase.equalsIgnoreCase(questionData.getRisposta1())) {
                         if (questionData.getEsitoRisp1() == 1) {
-                            Log.d("question-logic-focus", RISPOSTA_CORRETTA);
-                            responseText = RISPOSTA_CORRETTA;
+                            //responseText = RISPOSTA_CORRETTA;
+                            responseText = getRandomFeedback();
+                            response = "corretto";
+
                             corrAnswers+=1;
                         } else if (questionData.getEsitoRisp1() == 2) {
-                            Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
-                            responseText = RISPOSTA_SBAGLIATA;
+                            //responseText = RISPOSTA_SBAGLIATA;
+                            responseText = getRandomFeedback();
+                            response = "sbagliato";
                         }
                         index = questionData.getIdParDestinazione1() - 1; // -1 perché index è zero-based
                     } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta2())) {
                         if (questionData.getEsitoRisp2() == 1) {
-                            Log.d("question-logic-focus", RISPOSTA_CORRETTA);
-                            responseText = RISPOSTA_CORRETTA;
+                            //responseText = RISPOSTA_CORRETTA;
+                            responseText = getRandomFeedback();
+                            response = "corretto";
                             corrAnswers+=1;
                         } else if (questionData.getEsitoRisp2() == 2) {
-                            Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
-                            responseText = RISPOSTA_SBAGLIATA;
+                            //responseText = RISPOSTA_SBAGLIATA;
+                            responseText = getRandomFeedback();
+                            response = "sbagliato";
                         }
                         index = questionData.getIdParDestinazione2() - 1;
                     } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta3())) {
                         if (questionData.getEsitoRisp3() == 1) {
-                            Log.d("question-logic-focus", RISPOSTA_CORRETTA);
-                            responseText = RISPOSTA_CORRETTA;
+                            //responseText = RISPOSTA_CORRETTA;
+                            responseText = getRandomFeedback();
+                            response = "corretto";
                             corrAnswers+=1;
                         } else if (questionData.getEsitoRisp3() == 2) {
-                            Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
-                            responseText = RISPOSTA_SBAGLIATA;
+                            //responseText = RISPOSTA_SBAGLIATA;
+                            responseText = getRandomFeedback();
+                            response = "sbagliato";
                         }
                         index = questionData.getIdParDestinazione3() - 1;
                     } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta4())) {
                         if (questionData.getEsitoRisp4() == 1) {
-                            Log.d("question-logic-focus", RISPOSTA_CORRETTA);
-                            responseText = RISPOSTA_CORRETTA;
+                            //responseText = RISPOSTA_CORRETTA;
+                            responseText = getRandomFeedback();
+                            response = "corretto";
                             corrAnswers+=1;
                         } else if (questionData.getEsitoRisp4() == 2) {
-                            Log.d("question-logic-focus", RISPOSTA_SBAGLIATA);
-                            responseText = RISPOSTA_SBAGLIATA;
+                            //responseText = RISPOSTA_SBAGLIATA;
+                            responseText = getRandomFeedback();
+                            response = "sbagliato";
                         }
                         index = questionData.getIdParDestinazione4() - 1;
                     }
@@ -1001,14 +1101,14 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                         runOnUiThread(() -> buttonContainer.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton3.setVisibility(View.GONE));
                         runOnUiThread(() -> answerButton4.setVisibility(View.GONE));
-                        runOnUiThread(() -> correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers));
+                        //runOnUiThread(() -> correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers));
+                        esito.add(new Esito(PepperStory.storyTitle, index, response));
                         runOnUiThread(this::getParagraph);
                     });
                 });
             });
         }
     }
-// TODO : 17/06/2024 Aggiungere una considerazione finale in base al numero di risposte corrette? - far ripartire subito la storia?
 
     @Override
     public void onRobotFocusLost() {
@@ -1027,3 +1127,15 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
     }
 
 }
+
+/*TODO : Differenziare il layout da test con feedback e test senza feedback, per ora i feed visivi saranno commentati:
+   1- [FATTO] Cambiare il colore dei bottoni (questo per entrambe le versioni),
+   2- [FATTO] Contatore risposte corrette sul totale non visibile in test senza feed (mostrare invece il numero della domanda, utile per l'esaminatore eventualmente)
+   3- [FATTO] Non specificare risposta corretta o risposta sbagliata per il test senza feed (creazione di una pool di frasi propositive invece a pesca randomica)
+   4- [FATTO] Caricamento esito test
+   Righe commentate
+    Counter risposte corrette
+        Rigo: 669-700, 852, 1111, 1029
+    Risposta corretta o sbagliata
+        Rigo : 859, 869, 972, 978, 985, 990, 997, 1002, 1009, 1014
+*/

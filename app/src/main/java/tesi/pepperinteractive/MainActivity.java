@@ -57,7 +57,7 @@ public class MainActivity extends RobotActivity implements RobotLifecycleCallbac
         // Run the animate action asynchronously.
         Future<Void> animateFuture = animate.async().run();
 
-        Phrase phrase = new Phrase("Benvenuti in Pepper Interactive Story. Premi il tasto pley sul tablet oppure di' avvia per iniziare.");
+        Phrase phrase = new Phrase("Benvenuti in Pepper Interactive. Premi il tasto pley sul tablet oppure di' avvia per iniziare.");
         Say say = SayBuilder.with(qiContext).withPhrase(phrase).build();
         say.run();
 

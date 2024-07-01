@@ -150,7 +150,7 @@ public class PepperStory extends RobotActivity implements RobotLifecycleCallback
             if (!(results.isEmpty())) {
                 showSearchResults();
             } else {
-                Toast.makeText(PepperStory.this, "Nessuna storia trovata", Toast.LENGTH_SHORT).show();
+                Toast.makeText(PepperStory.this, "Nessun risultato", Toast.LENGTH_SHORT).show();
             }
             Log.d("search-titles", "risultati ricerca: " +results.toString());
         }
@@ -338,7 +338,7 @@ public class PepperStory extends RobotActivity implements RobotLifecycleCallback
     @Override
     public void onRobotFocusGained(QiContext qiContext) {
         if(flagStart == 0) {
-            Phrase initialPhrase = new Phrase("Scegli una storia presente nella lista per farmela raccontare. Per scorrere le pagine puoi dire avanti o indietro");
+            Phrase initialPhrase = new Phrase("Scegli una storia o un test dalla lista per iniziare. Per scorrere le pagine puoi dire avanti o indietro");
             Say say = SayBuilder.with(qiContext).withPhrase(initialPhrase).build();
             say.run();
             flagStart = 1;

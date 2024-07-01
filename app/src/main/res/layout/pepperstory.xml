@@ -151,7 +151,7 @@
         android:layout_marginBottom="190dp"
         android:fontFamily="@font/childrenbookkids"
         android:textSize="30sp"
-        android:hint="Cerca storia"
+        android:hint="Cerca"
         android:inputType="text"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toEndOf="@+id/search_button" />

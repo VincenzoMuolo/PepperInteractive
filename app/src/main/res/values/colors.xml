@@ -6,7 +6,7 @@
     <!--Colori per il bottone ed il testo-->
     <color name="questionButton">#185BB1</color>
     <color name="questionButtonPressed">#14488A</color>
-    <color name="questionButtonDisabled">#053165</color>
+    <color name="questionButtonDisabled">#535353</color>
     <color name="textButton">#E8E7E7</color>
     <color name="textButtonPressed">#DDDDDD</color>
     <!--Colori loading bar-->
