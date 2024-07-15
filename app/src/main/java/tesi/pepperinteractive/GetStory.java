@@ -111,10 +111,11 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
     private int corrAnswers = 0, totAnswers = 0, countAnswers = 0;
     String[] positiveFeedback = {
             "Bene",
-            "Continuamo",
+            "Andiamo avanti",
             "Bravo",
             "Vediamone un'altra"
     };
+    boolean interactiveStory= false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -574,7 +575,9 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                                 esitoRisp2 = jsonObject.optInt("esitoRisp2");
                                 esitoRisp3 = jsonObject.optInt("esitoRisp3");
                                 esitoRisp4 = jsonObject.optInt("esitoRisp4");
-
+                                if (domanda.equals("StoryEnding")){
+                                    interactiveStory= true;
+                                }
                                 QuestionData questionData = new QuestionData(domanda, risposta1, risposta2, risposta3, risposta4,
                                         idParDestinazione1, idParDestinazione2, idParDestinazione3, idParDestinazione4, esitoRisp1, esitoRisp2, esitoRisp3, esitoRisp4);
                                 questionDataMap.put(paragraphID, questionData);
@@ -724,16 +727,20 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
         finish();
     }
 
+    int endStory= 999;
+
     @Override
     public void onRobotFocusGained(QiContext qiContext) {
         int q_index;
         Log.d("prova", "valore array paragrafi: " +story.size());
         Log.d("prova", "valore array immagini: " +imageList.size());
-
-        Phrase paragrafo = new Phrase("\\rspd=85\\\\wait=9\\" + story.get(index));
-        Say say = SayBuilder.with(qiContext).withPhrase(paragrafo).build();
-        say.run();
-        if (index + 1 < story.size()) {
+        if(index + 1 <= endStory){
+            Phrase paragrafo = new Phrase("\\rspd=85\\\\wait=9\\" + story.get(index));
+            Say say = SayBuilder.with(qiContext).withPhrase(paragrafo).build();
+            say.run();
+        }
+        if (index + 1 < story.size() && index + 1 <= endStory) {
+            Log.d("FLOW", "INDEX : "+ (index+1)+ " ENDSTORY : "+endStory);
             //INIZIO AGGIUNTA DOMANDE
             q_index=index+1;
             if (questionDataMap.containsKey(q_index)) {
@@ -779,10 +786,12 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             }
             //FINE AGGIUNTA DOMANDE
 
-
         } else if (index + 1==story.size()){
+            runOnUiThread(() -> imageView.setImageBitmap(null));
+            runOnUiThread(() -> imageView.setBackgroundColor(Color.parseColor("#B0E0E6")));
             //SE SIAMO ALL'ULTIMO PARAGRAFO
             Log.d("get-story", "sono nell'else ultimo paragrafo : "+story.size());
+            Log.d("FLOW", "INDEX : "+ (index+1)+ " ENDSTORY : "+endStory);
             if (questionDataMap.containsKey(story.size())) {
                 // Ottieni l'oggetto QuestionData corrispondente all'idParagrafoDesiderato
                 QuestionData questionData = questionDataMap.get(story.size());
@@ -793,8 +802,6 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             } else {
                 Log.d("question-logic-focus", "Nessuna informazione trovata per l'IdParagrafo " + story.size());
             }
-
-            runOnUiThread(() -> nextParagraph.setVisibility(View.INVISIBLE));
 
             //RACCONTO MORALE
             if (moral!=null &&!moral.isEmpty()) {
@@ -814,25 +821,26 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             // Run the animate action asynchronously.
             Future<Void> animateFuture = animate.async().run();
             String endStoryPhrase="La storia è terminata. Grazie a tutti per l'attenzione.";
-            if (!questionDataMap.isEmpty())
-                endStoryPhrase="Grazie per la partecipazione";
+            if (!questionDataMap.isEmpty() && !interactiveStory){
+                endStoryPhrase="";
+                DataUploader uploader = new DataUploader();
+                uploader.saveDataToServer(esito);
+            }
             Phrase endStory = new Phrase(endStoryPhrase);
             Say say2 = SayBuilder.with(qiContext).withPhrase(endStory).build();
             say2.run();
-            DataUploader uploader = new DataUploader();
-            uploader.saveDataToServer(esito);
+
+            runOnUiThread(() -> nextParagraph.setVisibility(View.INVISIBLE));
             startActivity(new Intent(GetStory.this, PepperStory.class));
             finish();
         }
-
-
-        nextParagraph.setOnClickListener(view -> {
+        /*nextParagraph.setOnClickListener(view -> {
             Log.d("question-logic-focus", "SONO IN NEXTPARAGRAPH");
             index = index +1;
             runOnUiThread(() -> imageView.setVisibility(View.VISIBLE));
             runOnUiThread(() -> nextParagraph.setVisibility(View.INVISIBLE));
             getParagraph();
-        });
+        });*/
     }
 
     private String getRandomFeedback() {
@@ -844,7 +852,7 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
     private Future<ListenResult> listenFuture; // Variabile per tracciare il Future del processo di ascolto
     private boolean preventSpam = false;
     private String response;
-    private boolean isTest = false;
+
 
     private void handleAnswerFromButton(int idParagraphDestination, int answerType, QiContext qiContext) {
         int newIndex;
@@ -949,12 +957,11 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
                 protected void onPostExecute(String result) {
                     super.onPostExecute(result);
                     // Mostra un toast qui
-                    if(isTest){
-                        if (result != null) {
-                            Toast.makeText(getApplicationContext(), "Test completato, i dati verranno caricati sul sito web", Toast.LENGTH_LONG).show();
-                        } else {
-                            Toast.makeText(getApplicationContext(), "Errore nel caricamento dei dati.", Toast.LENGTH_LONG).show();
-                        }
+
+                    if (result != null) {
+                        Toast.makeText(getApplicationContext(), "Test completato, i dati verranno caricati sul sito web", Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(getApplicationContext(), "Errore nel caricamento dei dati.", Toast.LENGTH_LONG).show();
                     }
 
                 }
@@ -967,147 +974,157 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
     }
 
     private void askQuestionAndListen(QiContext qiContext, QuestionData questionData) {
-        runOnUiThread(() -> {
-            correctAnswersCount.setVisibility(View.VISIBLE);
-            correctAnswersCount.setText("Domanda " + (n_question));
-        });
-        Log.d("question-logic-focus", "Sto per farti una domanda: " + questionData.getDomanda());
-        String build_phrase_with_answers = questionData.getDomanda() + "\\wait=9\\" + questionData.getRisposta1() + "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta2();
-        if (!questionData.getRisposta3().equals("null")) {
-            Log.d("question-logic-focus", "QUANTO VALE: "+questionData.getRisposta3());
-            build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta3();
-            if (!questionData.getRisposta4().equals("null")) {
-                Log.d("question-logic-focus", "QUANTO VALE: "+questionData.getRisposta4());
-                build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta4();
-            }
-        }
-        Phrase questionPhrase = new Phrase("\\rspd=85\\\\wait=9\\"+build_phrase_with_answers);
-        Say sayQuestion = SayBuilder.with(qiContext).withPhrase(questionPhrase).build();
-        runOnUiThread(() -> {
-            buttonContainer.setVisibility(View.VISIBLE);
-            answerButton1.setText(questionData.getRisposta1());
-            answerButton2.setText(questionData.getRisposta2());
-            answerButton3.setText(questionData.getRisposta3());
-            answerButton4.setText(questionData.getRisposta4());
-            answerButton1.setEnabled(false);
-            answerButton2.setEnabled(false);
-            answerButton3.setEnabled(false);
-            answerButton4.setEnabled(false);
+        if(questionData.getDomanda().equals("StoryEnding")){
+            runOnUiThread(() -> {
+                correctAnswersCount.setVisibility(View.GONE);
+            });
+            index= questionData.getIdParDestinazione1()-1;
+            endStory= questionData.getIdParDestinazione1();
+            interactiveStory= true;
+            runOnUiThread(this::getParagraph);
+        }else{
+            runOnUiThread(() -> {
+                correctAnswersCount.setVisibility(View.VISIBLE);
+                correctAnswersCount.setText("Domanda " + (n_question));
+            });
+            Log.d("question-logic-focus", "Sto per farti una domanda: " + questionData.getDomanda());
+            String build_phrase_with_answers = questionData.getDomanda() + "\\wait=9\\" + questionData.getRisposta1() + "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta2();
             if (!questionData.getRisposta3().equals("null")) {
-                answerButton3.setVisibility(View.VISIBLE);
-            }
-            if (!questionData.getRisposta4().equals("null")) {
-                answerButton4.setVisibility(View.VISIBLE);
-            }
-        });
-        n_question +=1;
-        // Metodo di interazione 1: pressione sul bottone
-        answerButton1.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione1(), questionData.getEsitoRisp1(), qiContext));
-        answerButton2.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione2(), questionData.getEsitoRisp2(), qiContext));
-        answerButton3.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione3(), questionData.getEsitoRisp3(), qiContext));
-        answerButton4.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione4(), questionData.getEsitoRisp4(), qiContext));
 
-        // Metodo di interazione 2: risposta a voce
-        if (!isButtonPressed) {
-            sayQuestion.async().run().andThenConsume(ignore -> {
-                Log.d("question-logic-focus", "Le risposte sono "+
-                        "\nA : " + questionData.getRisposta1() +" La risposta è : "+questionData.getEsitoRisp1()+
-                        "\nB : " + questionData.getRisposta2() +" La risposta è : "+questionData.getEsitoRisp2()+
-                        "\nC : " + questionData.getRisposta3() +" La risposta è : "+questionData.getEsitoRisp3()+
-                        "\nD : " + questionData.getRisposta4() +" La risposta è : "+questionData.getEsitoRisp4());
-                runOnUiThread(() -> {
+                build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta3();
+                if (!questionData.getRisposta4().equals("null")) {
+                    build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta4();
+                }
+            }
+            Phrase questionPhrase = new Phrase("\\rspd=85\\\\wait=9\\"+build_phrase_with_answers);
+            Say sayQuestion = SayBuilder.with(qiContext).withPhrase(questionPhrase).build();
+            runOnUiThread(() -> {
+                buttonContainer.setVisibility(View.VISIBLE);
+                answerButton1.setText(questionData.getRisposta1());
+                answerButton2.setText(questionData.getRisposta2());
+                answerButton3.setText(questionData.getRisposta3());
+                answerButton4.setText(questionData.getRisposta4());
+                answerButton1.setEnabled(false);
+                answerButton2.setEnabled(false);
+                answerButton3.setEnabled(false);
+                answerButton4.setEnabled(false);
+                if (!questionData.getRisposta3().equals("null")) {
+                    answerButton3.setVisibility(View.VISIBLE);
+                }
+                if (!questionData.getRisposta4().equals("null")) {
+                    answerButton4.setVisibility(View.VISIBLE);
+                }
+            });
+            n_question +=1;
+            // Metodo di interazione 1: pressione sul bottone
+            answerButton1.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione1(), questionData.getEsitoRisp1(), qiContext));
+            answerButton2.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione2(), questionData.getEsitoRisp2(), qiContext));
+            answerButton3.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione3(), questionData.getEsitoRisp3(), qiContext));
+            answerButton4.setOnClickListener(view -> handleAnswerFromButton(questionData.getIdParDestinazione4(), questionData.getEsitoRisp4(), qiContext));
+
+            // Metodo di interazione 2: risposta a voce
+            if (!isButtonPressed) {
+                sayQuestion.async().run().andThenConsume(ignore -> {
+                    Log.d("question-logic-focus", "Le risposte sono "+
+                            "\nA : " + questionData.getRisposta1() +" La risposta è : "+questionData.getEsitoRisp1()+
+                            "\nB : " + questionData.getRisposta2() +" La risposta è : "+questionData.getEsitoRisp2()+
+                            "\nC : " + questionData.getRisposta3() +" La risposta è : "+questionData.getEsitoRisp3()+
+                            "\nD : " + questionData.getRisposta4() +" La risposta è : "+questionData.getEsitoRisp4());
+                    runOnUiThread(() -> {
                         answerButton1.setEnabled(true);
                         answerButton2.setEnabled(true);
                         answerButton3.setEnabled(true);
                         answerButton4.setEnabled(true);
-                });
-                PhraseSet phraseSet1 = PhraseSetBuilder.with(qiContext)
-                        .withTexts(questionData.getRisposta1()).build();
-                PhraseSet phraseSet2 = PhraseSetBuilder.with(qiContext)
-                        .withTexts(questionData.getRisposta2()).build();
-                PhraseSet phraseSet3 = PhraseSetBuilder.with(qiContext)
-                        .withTexts(questionData.getRisposta3()).build();
-                PhraseSet phraseSet4 = PhraseSetBuilder.with(qiContext)
-                        .withTexts(questionData.getRisposta4()).build();
+                    });
+                    PhraseSet phraseSet1 = PhraseSetBuilder.with(qiContext)
+                            .withTexts(questionData.getRisposta1()).build();
+                    PhraseSet phraseSet2 = PhraseSetBuilder.with(qiContext)
+                            .withTexts(questionData.getRisposta2()).build();
+                    PhraseSet phraseSet3 = PhraseSetBuilder.with(qiContext)
+                            .withTexts(questionData.getRisposta3()).build();
+                    PhraseSet phraseSet4 = PhraseSetBuilder.with(qiContext)
+                            .withTexts(questionData.getRisposta4()).build();
 
-                Listen listenAnswer = ListenBuilder.with(qiContext)
-                        .withPhraseSets(phraseSet1, phraseSet2, phraseSet3, phraseSet4)
-                        .build();
+                    Listen listenAnswer = ListenBuilder.with(qiContext)
+                            .withPhraseSets(phraseSet1, phraseSet2, phraseSet3, phraseSet4)
+                            .build();
 
-                // Salva il Future del processo di ascolto
-                listenFuture = listenAnswer.async().run();
-                listenFuture.andThenConsume(listenResult -> {
-                    String heardPhrase = listenResult.getHeardPhrase().getText();
-                    Log.d("question-logic-focus", "Heard phrase: " + heardPhrase);
+                    // Salva il Future del processo di ascolto
+                    listenFuture = listenAnswer.async().run();
+                    listenFuture.andThenConsume(listenResult -> {
+                        String heardPhrase = listenResult.getHeardPhrase().getText();
+                        Log.d("question-logic-focus", "Heard phrase: " + heardPhrase);
 
-                    String responseText="";
+                        String responseText="";
 
-                    if (heardPhrase.equalsIgnoreCase(questionData.getRisposta1())) {
-                        if (questionData.getEsitoRisp1() == 1) {
-                            //responseText = RISPOSTA_CORRETTA;
-                            responseText = getRandomFeedback();
-                            response = "corretto";
+                        if (heardPhrase.equalsIgnoreCase(questionData.getRisposta1())) {
+                            if (questionData.getEsitoRisp1() == 1) {
+                                //responseText = RISPOSTA_CORRETTA;
+                                responseText = getRandomFeedback();
+                                response = "corretto";
 
-                            corrAnswers+=1;
-                        } else if (questionData.getEsitoRisp1() == 2) {
-                            //responseText = RISPOSTA_SBAGLIATA;
-                            responseText = getRandomFeedback();
-                            response = "sbagliato";
+                                corrAnswers+=1;
+                            } else if (questionData.getEsitoRisp1() == 2) {
+                                //responseText = RISPOSTA_SBAGLIATA;
+                                responseText = getRandomFeedback();
+                                response = "sbagliato";
+                            }
+                            index = questionData.getIdParDestinazione1() - 1; // -1 perché index è zero-based
+                        } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta2())) {
+                            if (questionData.getEsitoRisp2() == 1) {
+                                //responseText = RISPOSTA_CORRETTA;
+                                responseText = getRandomFeedback();
+                                response = "corretto";
+                                corrAnswers+=1;
+                            } else if (questionData.getEsitoRisp2() == 2) {
+                                //responseText = RISPOSTA_SBAGLIATA;
+                                responseText = getRandomFeedback();
+                                response = "sbagliato";
+                            }
+                            index = questionData.getIdParDestinazione2() - 1;
+                        } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta3())) {
+                            if (questionData.getEsitoRisp3() == 1) {
+                                //responseText = RISPOSTA_CORRETTA;
+                                responseText = getRandomFeedback();
+                                response = "corretto";
+                                corrAnswers+=1;
+                            } else if (questionData.getEsitoRisp3() == 2) {
+                                //responseText = RISPOSTA_SBAGLIATA;
+                                responseText = getRandomFeedback();
+                                response = "sbagliato";
+                            }
+                            index = questionData.getIdParDestinazione3() - 1;
+                        } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta4())) {
+                            if (questionData.getEsitoRisp4() == 1) {
+                                //responseText = RISPOSTA_CORRETTA;
+                                responseText = getRandomFeedback();
+                                response = "corretto";
+                                corrAnswers+=1;
+                            } else if (questionData.getEsitoRisp4() == 2) {
+                                //responseText = RISPOSTA_SBAGLIATA;
+                                responseText = getRandomFeedback();
+                                response = "sbagliato";
+                            }
+                            index = questionData.getIdParDestinazione4() - 1;
                         }
-                        index = questionData.getIdParDestinazione1() - 1; // -1 perché index è zero-based
-                    } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta2())) {
-                        if (questionData.getEsitoRisp2() == 1) {
-                            //responseText = RISPOSTA_CORRETTA;
-                            responseText = getRandomFeedback();
-                            response = "corretto";
-                            corrAnswers+=1;
-                        } else if (questionData.getEsitoRisp2() == 2) {
-                            //responseText = RISPOSTA_SBAGLIATA;
-                            responseText = getRandomFeedback();
-                            response = "sbagliato";
-                        }
-                        index = questionData.getIdParDestinazione2() - 1;
-                    } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta3())) {
-                        if (questionData.getEsitoRisp3() == 1) {
-                            //responseText = RISPOSTA_CORRETTA;
-                            responseText = getRandomFeedback();
-                            response = "corretto";
-                            corrAnswers+=1;
-                        } else if (questionData.getEsitoRisp3() == 2) {
-                            //responseText = RISPOSTA_SBAGLIATA;
-                            responseText = getRandomFeedback();
-                            response = "sbagliato";
-                        }
-                        index = questionData.getIdParDestinazione3() - 1;
-                    } else if (heardPhrase.equalsIgnoreCase(questionData.getRisposta4())) {
-                        if (questionData.getEsitoRisp4() == 1) {
-                            //responseText = RISPOSTA_CORRETTA;
-                            responseText = getRandomFeedback();
-                            response = "corretto";
-                            corrAnswers+=1;
-                        } else if (questionData.getEsitoRisp4() == 2) {
-                            //responseText = RISPOSTA_SBAGLIATA;
-                            responseText = getRandomFeedback();
-                            response = "sbagliato";
-                        }
-                        index = questionData.getIdParDestinazione4() - 1;
-                    }
 
 
-                    Log.d("question-logic-focus","Sono dopo il metodo vocale");
-                    Phrase answerType = new Phrase("\\rspd=85\\\\wait=9\\"+responseText);
-                    Say sayAnswer = SayBuilder.with(qiContext).withPhrase(answerType).build();
-                    sayAnswer.async().run().andThenConsume(gotonext -> {
-                        runOnUiThread(() -> buttonContainer.setVisibility(View.GONE));
-                        runOnUiThread(() -> answerButton3.setVisibility(View.GONE));
-                        runOnUiThread(() -> answerButton4.setVisibility(View.GONE));
-                        //runOnUiThread(() -> correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers));
-                        esito.add(new Esito(PepperStory.storyTitle, index, response));
-                        runOnUiThread(this::getParagraph);
+                        Log.d("question-logic-focus","Sono dopo il metodo vocale");
+                        Phrase answerType = new Phrase("\\rspd=85\\\\wait=9\\"+responseText);
+                        Say sayAnswer = SayBuilder.with(qiContext).withPhrase(answerType).build();
+                        sayAnswer.async().run().andThenConsume(gotonext -> {
+                            runOnUiThread(() -> buttonContainer.setVisibility(View.GONE));
+                            runOnUiThread(() -> answerButton3.setVisibility(View.GONE));
+                            runOnUiThread(() -> answerButton4.setVisibility(View.GONE));
+                            //runOnUiThread(() -> correctAnswersCount.setText("Risposte corrette : "+corrAnswers+" di "+totAnswers));
+                            esito.add(new Esito(PepperStory.storyTitle, index, response));
+                            runOnUiThread(this::getParagraph);
+                        });
                     });
                 });
-            });
+            }
         }
+
     }
 
     @Override
