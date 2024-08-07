@@ -983,17 +983,20 @@ public class GetStory extends RobotActivity implements RobotLifecycleCallbacks {
             interactiveStory= true;
             runOnUiThread(this::getParagraph);
         }else{
-            runOnUiThread(() -> {
-                correctAnswersCount.setVisibility(View.VISIBLE);
-                correctAnswersCount.setText("Domanda " + (n_question));
-            });
+            if(!interactiveStory){
+                runOnUiThread(() -> {
+                    correctAnswersCount.setVisibility(View.VISIBLE);
+                    correctAnswersCount.setText("Domanda " + (n_question));
+                });
+            }
+
             Log.d("question-logic-focus", "Sto per farti una domanda: " + questionData.getDomanda());
-            String build_phrase_with_answers = questionData.getDomanda() + "\\wait=9\\" + questionData.getRisposta1() + "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta2();
+            String build_phrase_with_answers = questionData.getDomanda() + ", \\wait=9\\" + questionData.getRisposta1() + ",\\wait=9\\ o \\wait=9\\" + questionData.getRisposta2();
             if (!questionData.getRisposta3().equals("null")) {
 
-                build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta3();
+                build_phrase_with_answers += ",\\wait=9\\ o \\wait=9\\" + questionData.getRisposta3();
                 if (!questionData.getRisposta4().equals("null")) {
-                    build_phrase_with_answers += "\\wait=9\\ o \\wait=9\\" + questionData.getRisposta4();
+                    build_phrase_with_answers += ",\\wait=9\\ o \\wait=9\\" + questionData.getRisposta4();
                 }
             }
             Phrase questionPhrase = new Phrase("\\rspd=85\\\\wait=9\\"+build_phrase_with_answers);
